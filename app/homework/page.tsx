@@ -35,8 +35,12 @@ function HomeworkDashboardInner() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch today's students (filtered by day-of-week schedule)
-      const studentsRes = await fetch("/api/students?status=active");
+      // Fetch all data in parallel — progress is independent of homework sessions
+      const [studentsRes, progressRes] = await Promise.all([
+        fetch("/api/students?status=active"),
+        fetch(`/api/progress?date=${selectedDate}`),
+      ]);
+
       if (studentsRes.ok) {
         const studentsJson = await studentsRes.json();
         setTodayStudents(
@@ -47,44 +51,38 @@ function HomeworkDashboardInner() {
         );
       }
 
-      // Get or create session
-      const sessionRes = await fetch(
-        isToday
-          ? "/api/homework/sessions"
-          : `/api/homework/sessions?date=${selectedDate}`,
-        isToday ? { method: "POST" } : undefined,
-      );
-      if (!sessionRes.ok) {
-        if (!isToday) {
-          setItems([]);
-          return;
-        }
-        setError("無法載入記錄");
-        return;
-      }
-      const sessionJson = await sessionRes.json();
-      const sessions = isToday ? [sessionJson.data] : (sessionJson.data ?? []);
-      if (sessions.length === 0 || !sessions[0]?.id) {
-        setItems([]);
-        return;
-      }
-
-      const sid = sessions[0].id;
-      setSessionId(sid);
-
-      const itemsRes = await fetch(`/api/homework/items?session_id=${sid}`);
-      if (!itemsRes.ok) {
-        setError("無法載入作業項目");
-        return;
-      }
-      const itemsJson = await itemsRes.json();
-      setItems(itemsJson.data ?? []);
-
-      // Load progress items for this date
-      const progressRes = await fetch(`/api/progress?date=${selectedDate}`);
       if (progressRes.ok) {
         const progressJson = await progressRes.json();
         setProgressItems(progressJson.data ?? []);
+      }
+
+      // Get or create homework session (separate from progress)
+      try {
+        const sessionRes = await fetch(
+          isToday
+            ? "/api/homework/sessions"
+            : `/api/homework/sessions?date=${selectedDate}`,
+          isToday ? { method: "POST" } : undefined,
+        );
+        if (sessionRes.ok) {
+          const sessionJson = await sessionRes.json();
+          const sessions = isToday
+            ? [sessionJson.data]
+            : (sessionJson.data ?? []);
+          if (sessions.length > 0 && sessions[0]?.id) {
+            const sid = sessions[0].id;
+            setSessionId(sid);
+            const itemsRes = await fetch(
+              `/api/homework/items?session_id=${sid}`,
+            );
+            if (itemsRes.ok) {
+              const itemsJson = await itemsRes.json();
+              setItems(itemsJson.data ?? []);
+            }
+          }
+        }
+      } catch {
+        // Homework session fetch failed, but progress tab still works
       }
     } catch {
       setError("網路錯誤，請重新整理");
