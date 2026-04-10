@@ -39,14 +39,21 @@ export default function PrintButton({ items, date }: PrintButtonProps) {
       a[1].name.localeCompare(b[1].name, "zh-TW"),
     );
 
+    // A4 printable height ~257mm, header+footer ~20mm, leaves ~237mm for table
+    // Calculate row height to fill the page evenly
+    const availableMm = 237;
+    const rowHeightMm = Math.floor(availableMm / Math.max(students.length, 1));
+    // Clamp between 12mm (minimum readable) and 40mm (too much whitespace)
+    const rowH = Math.min(40, Math.max(12, rowHeightMm));
+
     const rows = students
       .map(([, { name, items: si }]) => {
         const done = si.filter((i) => i.status === "done").length;
         const chips = si.map((i) => formatItem(i, date)).join("");
-        return `<tr>
-        <td style="width:60px;font-weight:700;font-size:11px;vertical-align:top;padding:4px 6px;border-bottom:1px solid #eee;white-space:nowrap">${name}</td>
-        <td style="padding:3px 4px;border-bottom:1px solid #eee;line-height:1.6">${chips}</td>
-        <td style="width:30px;text-align:center;font-size:10px;color:#888;vertical-align:top;padding:4px 2px;border-bottom:1px solid #eee">${done}/${si.length}</td>
+        return `<tr style="height:${rowH}mm">
+        <td style="width:60px;font-weight:700;font-size:12px;vertical-align:middle;padding:4px 8px;border-bottom:1px solid #ddd;white-space:nowrap">${name}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #ddd;line-height:1.8;vertical-align:middle">${chips}</td>
+        <td style="width:30px;text-align:center;font-size:10px;color:#888;vertical-align:middle;padding:4px 2px;border-bottom:1px solid #ddd">${done}/${si.length}</td>
       </tr>`;
       })
       .join("");
