@@ -7,8 +7,6 @@ import { Camera, Calendar } from "lucide-react";
 import MasterList from "@/components/homework/master-list";
 import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
-import TeacherPicker from "@/components/homework/teacher-picker";
-import { useTeacherId } from "@/hooks/useTeacherId";
 import { HomeworkItem, HomeworkItemStatus } from "@/lib/types/homework";
 
 export default function HomeworkDashboard() {
@@ -16,29 +14,15 @@ export default function HomeworkDashboard() {
   const [items, setItems] = useState<HomeworkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const {
-    teacherId,
-    setTeacherId,
-    teachers,
-    loading: teacherLoading,
-  } = useTeacherId();
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    if (!teacherId) {
-      setLoading(false);
-      return;
-    }
-
     async function loadTodayData() {
       setLoading(true);
       setError(null);
       try {
         const sessionRes = await fetch("/api/homework/sessions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ teacher_id: teacherId }),
         });
         if (!sessionRes.ok) {
           setError("無法載入今日記錄");
@@ -47,7 +31,6 @@ export default function HomeworkDashboard() {
         const sessionJson = await sessionRes.json();
         const sid = sessionJson.data?.id;
         if (!sid) return;
-        setSessionId(sid);
 
         const itemsRes = await fetch(`/api/homework/items?session_id=${sid}`);
         if (!itemsRes.ok) {
@@ -63,7 +46,7 @@ export default function HomeworkDashboard() {
       }
     }
     loadTodayData();
-  }, [teacherId]);
+  }, []);
 
   const handleStatusChange = useCallback(
     async (itemId: string, newStatus: HomeworkItemStatus) => {
@@ -101,7 +84,7 @@ export default function HomeworkDashboard() {
     <div className="min-h-screen bg-background">
       <div className="flex items-center justify-between p-4 border-b">
         <div>
-          <h1 className="text-xl font-bold">作業追蹤</h1>
+          <h1 className="text-xl font-bold">小學作業追蹤</h1>
           <p className="text-sm text-muted-foreground">{today}</p>
         </div>
         <div className="flex gap-2">
@@ -117,25 +100,10 @@ export default function HomeworkDashboard() {
         </div>
       </div>
 
-      {!teacherId && !teacherLoading && (
-        <TeacherPicker
-          teachers={teachers}
-          selectedId={teacherId}
-          onSelect={setTeacherId}
-        />
-      )}
-
       <div className="p-4 space-y-6">
-        {!teacherId && !teacherLoading && (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center text-amber-800">
-            請先選擇老師
-          </div>
-        )}
-
         <Button
           onClick={() => router.push("/homework/capture")}
           className="w-full h-14 text-lg"
-          disabled={!teacherId}
         >
           <Camera className="mr-2 h-5 w-5" />
           拍攝聯絡簿

@@ -9,13 +9,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Student } from "@/lib/types";
 import { ExtractionItem } from "@/lib/types/homework";
-import { useTeacherId } from "@/hooks/useTeacherId";
 
 type FlowStep = "select" | "camera" | "extracting" | "review" | "saving";
 
 export default function CapturePage() {
   const router = useRouter();
-  const { teacherId } = useTeacherId();
   const [step, setStep] = useState<FlowStep>("select");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [extractedItems, setExtractedItems] = useState<ExtractionItem[]>([]);
@@ -27,11 +25,8 @@ export default function CapturePage() {
 
   const ensureSession = useCallback(async () => {
     if (sessionId) return sessionId;
-    if (!teacherId) throw new Error("請先在作業追蹤頁面選擇老師");
     const res = await fetch("/api/homework/sessions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teacher_id: teacherId }),
     });
     const json = await res.json();
     if (json.data?.id) {
@@ -39,7 +34,7 @@ export default function CapturePage() {
       return json.data.id;
     }
     throw new Error(json.error ?? "無法建立記錄");
-  }, [sessionId, teacherId]);
+  }, [sessionId]);
 
   const handleStudentSelect = useCallback((student: Student) => {
     setSelectedStudent(student);
