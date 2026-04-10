@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
 
   let query = (supabase.from("wg_students") as any)
     .select("*")
-    .eq("department", "elementary")
+    .like("grade", "小%")
     .order("name", { ascending: true });
 
   if (status) {
