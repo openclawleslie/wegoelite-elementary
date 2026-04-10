@@ -7,6 +7,7 @@ import { Calendar, ArrowLeft } from "lucide-react";
 import MasterList from "@/components/homework/master-list";
 import ProgressList, {
   ProgressItem,
+  type ProgressStatus,
 } from "@/components/homework/progress-list";
 import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
@@ -126,7 +127,7 @@ function HomeworkDashboardInner() {
   );
 
   const handleProgressToggle = useCallback(
-    async (itemId: string, newStatus: string) => {
+    async (itemId: string, newStatus: ProgressStatus) => {
       setProgressItems((prev) =>
         prev.map((item) =>
           item.id === itemId ? { ...item, status: newStatus } : item,
