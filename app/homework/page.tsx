@@ -9,6 +9,8 @@ import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
 import { HomeworkItem, HomeworkItemStatus } from "@/lib/types/homework";
 
+type Tab = "school" | "progress";
+
 function HomeworkDashboardInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,6 +21,7 @@ function HomeworkDashboardInner() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("school");
   const today = new Date().toISOString().split("T")[0];
   const selectedDate = searchParams.get("date") || today;
   const isToday = selectedDate === today;
@@ -146,27 +149,69 @@ function HomeworkDashboardInner() {
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        {isToday && <ReminderBanner />}
+      {/* Tabs */}
+      <div className="flex border-b">
+        <button
+          onClick={() => setTab("school")}
+          className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+            tab === "school"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          學校作業
+        </button>
+        <button
+          onClick={() => setTab("progress")}
+          className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+            tab === "progress"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          進度
+        </button>
+      </div>
 
-        {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-sm">
-            {error}
-          </div>
+      <div className="p-4 space-y-4">
+        {tab === "school" && (
+          <>
+            {isToday && <ReminderBanner />}
+
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-sm">
+                {error}
+              </div>
+            )}
+
+            {loading ? (
+              <div className="py-12 text-center text-muted-foreground">
+                載入中...
+              </div>
+            ) : (
+              <MasterList
+                items={items}
+                todayStudents={todayStudents}
+                sessionId={sessionId}
+                onStatusChange={handleStatusChange}
+                onItemsChanged={loadData}
+              />
+            )}
+          </>
         )}
 
-        {loading ? (
-          <div className="py-12 text-center text-muted-foreground">
-            載入中...
+        {tab === "progress" && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+              <p className="text-lg font-medium text-gray-500">進度追蹤</p>
+              <p className="text-sm text-gray-400 mt-2">
+                評量 / 自修 / 英文單字 / 珠心算
+              </p>
+              <p className="text-xs text-gray-400 mt-4">
+                系統自動分配，即將上線
+              </p>
+            </div>
           </div>
-        ) : (
-          <MasterList
-            items={items}
-            todayStudents={todayStudents}
-            sessionId={sessionId}
-            onStatusChange={handleStatusChange}
-            onItemsChanged={loadData}
-          />
         )}
       </div>
     </div>
