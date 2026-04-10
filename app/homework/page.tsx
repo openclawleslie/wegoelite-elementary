@@ -126,7 +126,7 @@ function HomeworkDashboardInner() {
   );
 
   const handleProgressToggle = useCallback(
-    async (itemId: string, newStatus: "pending" | "done") => {
+    async (itemId: string, newStatus: string) => {
       setProgressItems((prev) =>
         prev.map((item) =>
           item.id === itemId ? { ...item, status: newStatus } : item,
