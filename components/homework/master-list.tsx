@@ -134,12 +134,27 @@ export default function MasterList({ items, onStatusChange }: MasterListProps) {
             >
               {/* Student header */}
               <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm">{name}</span>
-                <span
-                  className={`text-xs font-medium ${allDone ? "text-green-600" : "text-gray-500"}`}
-                >
-                  {done}/{total}
-                </span>
+                <span className="font-bold text-base">{name}</span>
+                <div className="flex items-center gap-2">
+                  {!allDone && (
+                    <button
+                      onClick={() => {
+                        for (const item of studentItems) {
+                          if (item.status !== "done")
+                            onStatusChange(item.id, "done");
+                        }
+                      }}
+                      className="text-[11px] text-gray-400 hover:text-green-600 transition-colors"
+                    >
+                      全部完成
+                    </button>
+                  )}
+                  <span
+                    className={`text-xs font-medium ${allDone ? "text-green-600" : "text-gray-500"}`}
+                  >
+                    {done}/{total}
+                  </span>
+                </div>
               </div>
 
               {/* Homework chips */}
