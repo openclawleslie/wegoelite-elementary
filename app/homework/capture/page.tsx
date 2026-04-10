@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import CameraCapture from "@/components/homework/camera-capture";
 import ExtractionReview from "@/components/homework/extraction-review";
 import StudentSelector from "@/components/homework/student-selector";
@@ -12,10 +12,29 @@ import { ExtractionItem } from "@/lib/types/homework";
 
 type FlowStep = "select" | "camera" | "extracting" | "review" | "saving";
 
-export default function CapturePage() {
+function CapturePageInner() {
   const router = useRouter();
-  const [step, setStep] = useState<FlowStep>("select");
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const searchParams = useSearchParams();
+
+  // If student_id is in URL params, skip the selector and go straight to camera
+  const paramStudentId = searchParams.get("student_id");
+  const paramStudentName = searchParams.get("student_name");
+  const hasDirectStudent = !!(paramStudentId && paramStudentName);
+
+  const [step, setStep] = useState<FlowStep>(
+    hasDirectStudent ? "camera" : "select",
+  );
+  const [selectedStudent, setSelectedStudent] = useState<Pick<
+    Student,
+    "id" | "name"
+  > | null>(
+    hasDirectStudent
+      ? ({
+          id: paramStudentId!,
+          name: decodeURIComponent(paramStudentName!),
+        } as any)
+      : null,
+  );
   const [extractedItems, setExtractedItems] = useState<ExtractionItem[]>([]);
   const [completedStudentIds, setCompletedStudentIds] = useState<Set<string>>(
     new Set(),
@@ -25,9 +44,7 @@ export default function CapturePage() {
 
   const ensureSession = useCallback(async () => {
     if (sessionId) return sessionId;
-    const res = await fetch("/api/homework/sessions", {
-      method: "POST",
-    });
+    const res = await fetch("/api/homework/sessions", { method: "POST" });
     const json = await res.json();
     if (json.data?.id) {
       setSessionId(json.data.id);
@@ -61,7 +78,6 @@ export default function CapturePage() {
           method: "POST",
           body: formData,
         });
-
         const json = await res.json();
 
         if (!res.ok || !json.extracted_data) {
@@ -72,7 +88,7 @@ export default function CapturePage() {
 
         setExtractedItems(json.extracted_data.items ?? []);
         setStep("review");
-      } catch (err) {
+      } catch {
         setError("網路錯誤，請重試");
         setStep("camera");
       }
@@ -87,7 +103,6 @@ export default function CapturePage() {
 
       try {
         const sid = await ensureSession();
-
         const itemsToSave = items.map((item) => ({
           session_id: sid,
           student_id: selectedStudent.id,
@@ -116,6 +131,13 @@ export default function CapturePage() {
           return;
         }
 
+        // If came from direct student link, go back to dashboard
+        if (hasDirectStudent) {
+          router.push("/homework");
+          return;
+        }
+
+        // Otherwise continue with student selector flow
         setCompletedStudentIds(
           (prev) => new Set([...prev, selectedStudent.id]),
         );
@@ -127,7 +149,7 @@ export default function CapturePage() {
         setStep("review");
       }
     },
-    [selectedStudent, ensureSession],
+    [selectedStudent, ensureSession, hasDirectStudent, router],
   );
 
   return (
@@ -141,7 +163,9 @@ export default function CapturePage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-bold">拍攝聯絡簿</h1>
+          <h1 className="text-lg font-bold">
+            {selectedStudent ? `${selectedStudent.name} 聯絡簿` : "拍攝聯絡簿"}
+          </h1>
         </div>
       )}
 
@@ -162,6 +186,10 @@ export default function CapturePage() {
         <CameraCapture
           onCapture={handleCapture}
           onCancel={() => {
+            if (hasDirectStudent) {
+              router.push("/homework");
+              return;
+            }
             setSelectedStudent(null);
             setStep("select");
           }}
@@ -194,5 +222,13 @@ export default function CapturePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CapturePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">載入中...</div>}>
+      <CapturePageInner />
+    </Suspense>
   );
 }

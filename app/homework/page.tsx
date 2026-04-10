@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Camera, Calendar, ArrowLeft } from "lucide-react";
+import { Calendar, ArrowLeft } from "lucide-react";
 import MasterList from "@/components/homework/master-list";
 import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
@@ -13,58 +13,74 @@ function HomeworkDashboardInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<HomeworkItem[]>([]);
+  const [todayStudents, setTodayStudents] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
   const selectedDate = searchParams.get("date") || today;
   const isToday = selectedDate === today;
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-      try {
-        // Get or create session (POST always uses today for creation)
-        const sessionRes = await fetch(
-          isToday
-            ? "/api/homework/sessions"
-            : `/api/homework/sessions?date=${selectedDate}`,
-          isToday ? { method: "POST" } : undefined,
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch today's students (filtered by day-of-week schedule)
+      const studentsRes = await fetch("/api/students?status=active");
+      if (studentsRes.ok) {
+        const studentsJson = await studentsRes.json();
+        setTodayStudents(
+          (studentsJson.data ?? []).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+          })),
         );
-        if (!sessionRes.ok) {
-          if (!isToday) {
-            // No session for that date, just show empty
-            setItems([]);
-            return;
-          }
-          setError("無法載入記錄");
-          return;
-        }
-        const sessionJson = await sessionRes.json();
-        const sessions = isToday
-          ? [sessionJson.data]
-          : (sessionJson.data ?? []);
-        if (sessions.length === 0 || !sessions[0]?.id) {
+      }
+
+      // Get or create session
+      const sessionRes = await fetch(
+        isToday
+          ? "/api/homework/sessions"
+          : `/api/homework/sessions?date=${selectedDate}`,
+        isToday ? { method: "POST" } : undefined,
+      );
+      if (!sessionRes.ok) {
+        if (!isToday) {
           setItems([]);
           return;
         }
-
-        const sid = sessions[0].id;
-        const itemsRes = await fetch(`/api/homework/items?session_id=${sid}`);
-        if (!itemsRes.ok) {
-          setError("無法載入作業項目");
-          return;
-        }
-        const itemsJson = await itemsRes.json();
-        setItems(itemsJson.data ?? []);
-      } catch {
-        setError("網路錯誤，請重新整理");
-      } finally {
-        setLoading(false);
+        setError("無法載入記錄");
+        return;
       }
+      const sessionJson = await sessionRes.json();
+      const sessions = isToday ? [sessionJson.data] : (sessionJson.data ?? []);
+      if (sessions.length === 0 || !sessions[0]?.id) {
+        setItems([]);
+        return;
+      }
+
+      const sid = sessions[0].id;
+      setSessionId(sid);
+
+      const itemsRes = await fetch(`/api/homework/items?session_id=${sid}`);
+      if (!itemsRes.ok) {
+        setError("無法載入作業項目");
+        return;
+      }
+      const itemsJson = await itemsRes.json();
+      setItems(itemsJson.data ?? []);
+    } catch {
+      setError("網路錯誤，請重新整理");
+    } finally {
+      setLoading(false);
     }
-    loadData();
   }, [selectedDate, isToday]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleStatusChange = useCallback(
     async (itemId: string, newStatus: HomeworkItemStatus) => {
@@ -73,24 +89,22 @@ function HomeworkDashboardInner() {
           item.id === itemId ? { ...item, status: newStatus } : item,
         ),
       );
-
       const res = await fetch(`/api/homework/items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (!res.ok) {
         setItems((prev) =>
           prev.map((item) => {
             if (item.id !== itemId) return item;
-            const currentIndex = ["pending", "in_progress", "done"].indexOf(
-              newStatus,
-            );
-            const prevStatus = ["pending", "in_progress", "done"][
-              (currentIndex - 1 + 3) % 3
-            ] as HomeworkItemStatus;
-            return { ...item, status: prevStatus };
+            const ci = ["pending", "in_progress", "done"].indexOf(newStatus);
+            return {
+              ...item,
+              status: ["pending", "in_progress", "done"][
+                (ci - 1 + 3) % 3
+              ] as HomeworkItemStatus,
+            };
           }),
         );
       }
@@ -132,17 +146,7 @@ function HomeworkDashboardInner() {
         </div>
       </div>
 
-      <div className="p-4 space-y-6">
-        {isToday && (
-          <Button
-            onClick={() => router.push("/homework/capture")}
-            className="w-full h-14 text-lg"
-          >
-            <Camera className="mr-2 h-5 w-5" />
-            拍攝聯絡簿
-          </Button>
-        )}
-
+      <div className="p-4 space-y-4">
         {isToday && <ReminderBanner />}
 
         {error && (
@@ -156,7 +160,13 @@ function HomeworkDashboardInner() {
             載入中...
           </div>
         ) : (
-          <MasterList items={items} onStatusChange={handleStatusChange} />
+          <MasterList
+            items={items}
+            todayStudents={todayStudents}
+            sessionId={sessionId}
+            onStatusChange={handleStatusChange}
+            onItemsChanged={loadData}
+          />
         )}
       </div>
     </div>
