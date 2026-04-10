@@ -12,12 +12,13 @@ export async function POST(req: NextRequest) {
 
   try {
     // Get all pending items for this date
+    // Carry both "pending" (not started) and "needs_correction" (yellow) to next day
     const { data: pending, error: fetchErr } = await (
       supabase.from("wg_progress_items") as any
     )
       .select("*")
       .eq("date", date)
-      .eq("status", "pending");
+      .in("status", ["pending", "needs_correction"]);
 
     if (fetchErr) {
       return NextResponse.json({ error: fetchErr.message }, { status: 500 });

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS wg_progress_items (
   date DATE NOT NULL,
   subject TEXT NOT NULL,
   description TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'carried')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'needs_correction', 'done', 'carried')),
   carried_from DATE,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()

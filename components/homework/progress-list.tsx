@@ -5,13 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle } from "lucide-react";
 
+export type ProgressStatus =
+  | "pending"
+  | "needs_correction"
+  | "done"
+  | "carried";
+
 export interface ProgressItem {
   id: string;
   student_id: string;
   date: string;
   subject: string;
   description: string;
-  status: "pending" | "done" | "carried";
+  status: ProgressStatus;
   carried_from: string | null;
   student?: { id: string; name: string };
 }
@@ -20,15 +26,25 @@ interface ProgressListProps {
   items: ProgressItem[];
   todayStudents: { id: string; name: string }[];
   date: string;
-  onStatusToggle: (itemId: string, newStatus: "pending" | "done") => void;
+  onStatusToggle: (itemId: string, newStatus: ProgressStatus) => void;
   onSubmitDay: () => void;
   isSubmitting: boolean;
 }
 
-const STATUS_STYLES = {
+const STATUS_CYCLE: ProgressStatus[] = ["pending", "needs_correction", "done"];
+
+const STATUS_STYLES: Record<ProgressStatus, string> = {
   pending: "bg-gray-100 text-gray-600 border-gray-200",
+  needs_correction: "bg-amber-100 text-amber-800 border-amber-300",
   done: "bg-green-100 text-green-700 border-green-300",
   carried: "bg-orange-100 text-orange-700 border-orange-300",
+};
+
+const STATUS_ICON: Record<ProgressStatus, string> = {
+  pending: "☐",
+  needs_correction: "△",
+  done: "✓",
+  carried: "→",
 };
 
 export default function ProgressList({
@@ -72,19 +88,24 @@ export default function ProgressList({
 
   const summary = useMemo(() => {
     const done = items.filter((i) => i.status === "done").length;
+    const needsCorrection = items.filter(
+      (i) => i.status === "needs_correction",
+    ).length;
     const carried = items.filter((i) => i.status === "carried").length;
     return {
       done,
+      needsCorrection,
       carried,
       total: items.length,
-      pending: items.length - done - carried,
+      unfinished: items.length - done - carried,
     };
   }, [items]);
 
   const handleTap = useCallback(
     (item: ProgressItem) => {
       if (item.status === "carried") return;
-      const next = item.status === "done" ? "pending" : "done";
+      const idx = STATUS_CYCLE.indexOf(item.status);
+      const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
       onStatusToggle(item.id, next);
     },
     [onStatusToggle],
@@ -171,12 +192,8 @@ export default function ProgressList({
                       title={item.description}
                       disabled={item.status === "carried"}
                     >
-                      {item.status === "done"
-                        ? "✓"
-                        : item.status === "carried"
-                          ? "→"
-                          : "☐"}{" "}
-                      {item.subject} {item.description}
+                      {STATUS_ICON[item.status]} {item.subject}{" "}
+                      {item.description}
                       {item.carried_from && (
                         <span className="text-[10px] opacity-60">
                           ({item.carried_from.slice(5)}順延)
@@ -200,22 +217,20 @@ export default function ProgressList({
       {/* End of day submit */}
       {items.length > 0 && (
         <div className="pt-4 border-t">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-sm text-gray-500">
-              {summary.pending > 0
-                ? `${summary.pending} 項未完成，將順延至下一個上課日`
-                : "全部完成！"}
-            </div>
+          <div className="text-sm text-gray-500 mb-2">
+            {summary.unfinished > 0
+              ? `${summary.unfinished} 項未完成（${summary.needsCorrection > 0 ? `${summary.needsCorrection} 需訂正` : ""}${summary.needsCorrection > 0 && summary.unfinished - summary.done - summary.needsCorrection > 0 ? "、" : ""}${summary.unfinished - summary.needsCorrection > 0 ? `${summary.unfinished - summary.needsCorrection} 未開始` : ""}），將順延至下一個上課日`
+              : "全部完成！"}
           </div>
           <Button
             onClick={onSubmitDay}
             disabled={isSubmitting}
-            className={`w-full h-12 text-base ${summary.pending === 0 ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}`}
+            className={`w-full h-12 text-base ${summary.unfinished === 0 ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}`}
           >
             {isSubmitting
               ? "提交中..."
-              : summary.pending > 0
-                ? `結束今日 (${summary.pending} 項順延)`
+              : summary.unfinished > 0
+                ? `結束今日 (${summary.unfinished} 項順延)`
                 : "結束今日 ✓"}
           </Button>
         </div>
