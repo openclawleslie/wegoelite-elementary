@@ -3,8 +3,6 @@
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { HomeworkItem } from "@/lib/types/homework";
 
 interface PrintButtonProps {
@@ -25,12 +23,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function PrintButton({ items, date }: PrintButtonProps) {
-  const generatePDF = useCallback(() => {
-    const doc = new jsPDF("p", "mm", "a4");
-
-    doc.setFontSize(16);
-    doc.text(`WeGoElite 每日作業清單 — ${date}`, 14, 20);
-
+  const handlePrint = useCallback(() => {
+    // Group by student
     const grouped = new Map<string, { name: string; items: HomeworkItem[] }>();
     for (const item of items) {
       const name = item.student?.name ?? "未知";
@@ -40,57 +34,81 @@ export default function PrintButton({ items, date }: PrintButtonProps) {
       grouped.get(item.student_id)!.items.push(item);
     }
 
-    let y = 30;
+    const totalDone = items.filter((i) => i.status === "done").length;
 
+    // Build student sections
+    let studentSections = "";
     for (const [, { name, items: studentItems }] of grouped) {
-      doc.setFontSize(12);
-      doc.text(name, 14, y);
-      y += 2;
+      const rows = studentItems
+        .map(
+          (item) => `
+        <tr>
+          <td style="text-align:center;width:36px">${STATUS_LABELS[item.status] ?? "☐"}</td>
+          <td style="width:44px">${TYPE_LABELS[item.item_type] ?? item.item_type}</td>
+          <td style="width:52px">${item.subject}</td>
+          <td>${item.description}</td>
+          <td style="width:90px;text-align:right">${item.due_date ?? "-"}</td>
+        </tr>`,
+        )
+        .join("");
 
-      autoTable(doc, {
-        startY: y,
-        head: [["完成", "類型", "科目", "內容", "截止日"]],
-        body: studentItems.map((item) => [
-          STATUS_LABELS[item.status] ?? "☐",
-          TYPE_LABELS[item.item_type] ?? item.item_type,
-          item.subject,
-          item.description,
-          item.due_date ?? "-",
-        ]),
-        styles: { fontSize: 10, cellPadding: 3 },
-        headStyles: { fillColor: [27, 42, 74] },
-        columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 15 },
-          2: { cellWidth: 20 },
-          3: { cellWidth: "auto" },
-          4: { cellWidth: 25 },
-        },
-        margin: { left: 14, right: 14 },
-      });
-
-      y = (doc as any).lastAutoTable.finalY + 10;
-
-      if (y > 260) {
-        doc.addPage();
-        y = 20;
-      }
+      studentSections += `
+        <div style="margin-bottom:16px;page-break-inside:avoid">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">${name}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#1B2A4A;color:#fff">
+                <th style="padding:4px 6px;text-align:center">完成</th>
+                <th style="padding:4px 6px;text-align:left">類型</th>
+                <th style="padding:4px 6px;text-align:left">科目</th>
+                <th style="padding:4px 6px;text-align:left">內容</th>
+                <th style="padding:4px 6px;text-align:right">截止日</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
     }
 
-    const totalDone = items.filter((i) => i.status === "done").length;
-    doc.setFontSize(10);
-    doc.text(
-      `共 ${items.length} 項 | 已完成 ${totalDone} 項 | 列印時間 ${new Date().toLocaleString("zh-TW")}`,
-      14,
-      y,
-    );
+    const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <title>WeGoElite 小學作業清單 ${date}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; padding:20px; color:#111; }
+    h1 { font-size:18px; margin-bottom:4px; }
+    .subtitle { font-size:12px; color:#666; margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:4px 6px; border-bottom:1px solid #ddd; }
+    tbody tr:nth-child(even) { background:#f9f9f9; }
+    .footer { margin-top:20px; font-size:10px; color:#999; border-top:1px solid #ddd; padding-top:8px; }
+    @media print {
+      body { padding:10px; }
+      .no-print { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>WeGoElite 小學每日作業清單</h1>
+  <div class="subtitle">${date} | 共 ${items.length} 項 | 已完成 ${totalDone} 項</div>
+  ${studentSections}
+  <div class="footer">列印時間 ${new Date().toLocaleString("zh-TW")}</div>
+  <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`;
 
-    doc.save(`homework-${date}.pdf`);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
   }, [items, date]);
 
   return (
     <Button
-      onClick={generatePDF}
+      onClick={handlePrint}
       variant="outline"
       disabled={items.length === 0}
     >
