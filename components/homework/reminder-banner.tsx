@@ -1,30 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { HomeworkReminder } from "@/lib/types/homework";
-import { AlertTriangle, Bell, Flame } from "lucide-react";
-
-const URGENCY_CONFIG = {
-  warning: {
-    icon: Bell,
-    bg: "bg-amber-50 border-amber-200",
-    text: "text-amber-800",
-    label: (days: number) => `還有 ${days} 天`,
-  },
-  urgent: {
-    icon: AlertTriangle,
-    bg: "bg-orange-50 border-orange-300",
-    text: "text-orange-800",
-    label: (days: number) => (days === 2 ? "後天" : "明天"),
-  },
-  critical: {
-    icon: Flame,
-    bg: "bg-red-50 border-red-300",
-    text: "text-red-800",
-    label: (days: number) => (days === 0 ? "今天!" : "明天!"),
-  },
-};
 
 export default function ReminderBanner() {
   const [reminders, setReminders] = useState<HomeworkReminder[]>([]);
@@ -36,7 +13,7 @@ export default function ReminderBanner() {
         const json = await res.json();
         setReminders(json.data ?? []);
       } catch {
-        // Silently fail — reminders are non-critical
+        // Non-critical
       }
     }
     fetchReminders();
@@ -44,32 +21,62 @@ export default function ReminderBanner() {
 
   if (reminders.length === 0) return null;
 
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium text-muted-foreground">
-        即將到來的考試與截止日
-      </h3>
-      {reminders.map((reminder) => {
-        const config = URGENCY_CONFIG[reminder.urgency];
-        const Icon = config.icon;
+  // Group by subject + description + due_date (same assignment across students)
+  const grouped = new Map<
+    string,
+    {
+      subject: string;
+      description: string;
+      due_date: string;
+      days_until: number;
+      urgency: HomeworkReminder["urgency"];
+      count: number;
+    }
+  >();
+  for (const r of reminders) {
+    const key = `${r.subject}|${r.description}|${r.due_date}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        subject: r.subject,
+        description: r.description,
+        due_date: r.due_date,
+        days_until: r.days_until,
+        urgency: r.urgency,
+        count: 0,
+      });
+    }
+    grouped.get(key)!.count++;
+  }
 
-        return (
-          <Card key={reminder.item_id} className={`p-3 border ${config.bg}`}>
-            <div className="flex items-center gap-3">
-              <Icon className={`h-5 w-5 shrink-0 ${config.text}`} />
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${config.text}`}>
-                  {reminder.student_name} — {reminder.subject}{" "}
-                  {reminder.description}
-                </p>
-              </div>
-              <span className={`text-xs font-bold shrink-0 ${config.text}`}>
-                {config.label(reminder.days_until)}
-              </span>
-            </div>
-          </Card>
-        );
-      })}
+  const items = Array.from(grouped.values()).sort(
+    (a, b) => a.days_until - b.days_until,
+  );
+
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+      <p className="text-xs font-medium text-orange-800 mb-2">即將到來</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item, i) => {
+          const dayLabel =
+            item.days_until === 0
+              ? "今天"
+              : item.days_until === 1
+                ? "明天"
+                : item.days_until === 2
+                  ? "後天"
+                  : `${item.days_until}天`;
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1 rounded-md bg-white border border-orange-200 px-2 py-1 text-xs text-orange-800"
+            >
+              <span className="font-medium">{item.subject}</span>
+              <span className="truncate max-w-24">{item.description}</span>
+              <span className="text-orange-500">{dayLabel}</span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -136,9 +136,13 @@ export default function HomeworkCalendarPage() {
             return (
               <div
                 key={i}
-                className={`h-20 rounded-lg p-1 text-xs border ${
+                onClick={() => {
+                  if (dayItems.length > 0)
+                    router.push(`/homework?date=${cell.date}`);
+                }}
+                className={`h-20 rounded-lg p-1 text-xs border transition-colors ${
                   isToday ? "border-primary bg-primary/5" : "border-transparent"
-                }`}
+                } ${dayItems.length > 0 ? "cursor-pointer hover:bg-gray-50 active:bg-gray-100" : ""}`}
               >
                 <span
                   className={`font-medium ${isToday ? "text-primary" : ""}`}

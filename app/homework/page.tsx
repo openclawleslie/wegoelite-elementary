@@ -1,37 +1,55 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Camera, Calendar } from "lucide-react";
+import { Camera, Calendar, ArrowLeft } from "lucide-react";
 import MasterList from "@/components/homework/master-list";
 import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
 import { HomeworkItem, HomeworkItemStatus } from "@/lib/types/homework";
 
-export default function HomeworkDashboard() {
+function HomeworkDashboardInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<HomeworkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
+  const selectedDate = searchParams.get("date") || today;
+  const isToday = selectedDate === today;
 
   useEffect(() => {
-    async function loadTodayData() {
+    async function loadData() {
       setLoading(true);
       setError(null);
       try {
-        const sessionRes = await fetch("/api/homework/sessions", {
-          method: "POST",
-        });
+        // Get or create session (POST always uses today for creation)
+        const sessionRes = await fetch(
+          isToday
+            ? "/api/homework/sessions"
+            : `/api/homework/sessions?date=${selectedDate}`,
+          isToday ? { method: "POST" } : undefined,
+        );
         if (!sessionRes.ok) {
-          setError("無法載入今日記錄");
+          if (!isToday) {
+            // No session for that date, just show empty
+            setItems([]);
+            return;
+          }
+          setError("無法載入記錄");
           return;
         }
         const sessionJson = await sessionRes.json();
-        const sid = sessionJson.data?.id;
-        if (!sid) return;
+        const sessions = isToday
+          ? [sessionJson.data]
+          : (sessionJson.data ?? []);
+        if (sessions.length === 0 || !sessions[0]?.id) {
+          setItems([]);
+          return;
+        }
 
+        const sid = sessions[0].id;
         const itemsRes = await fetch(`/api/homework/items?session_id=${sid}`);
         if (!itemsRes.ok) {
           setError("無法載入作業項目");
@@ -45,8 +63,8 @@ export default function HomeworkDashboard() {
         setLoading(false);
       }
     }
-    loadTodayData();
-  }, []);
+    loadData();
+  }, [selectedDate, isToday]);
 
   const handleStatusChange = useCallback(
     async (itemId: string, newStatus: HomeworkItemStatus) => {
@@ -83,12 +101,26 @@ export default function HomeworkDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="flex items-center justify-between p-4 border-b">
-        <div>
-          <h1 className="text-xl font-bold">小學作業追蹤</h1>
-          <p className="text-sm text-muted-foreground">{today}</p>
+        <div className="flex items-center gap-2">
+          {!isToday && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push("/homework")}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
+          <div>
+            <h1 className="text-xl font-bold">小學作業追蹤</h1>
+            <p className="text-sm text-muted-foreground">
+              {selectedDate}
+              {!isToday && " (查看歷史)"}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <PrintButton items={items} date={today} />
+          <PrintButton items={items} date={selectedDate} />
           <Button
             onClick={() => router.push("/homework/calendar")}
             variant="outline"
@@ -101,15 +133,17 @@ export default function HomeworkDashboard() {
       </div>
 
       <div className="p-4 space-y-6">
-        <Button
-          onClick={() => router.push("/homework/capture")}
-          className="w-full h-14 text-lg"
-        >
-          <Camera className="mr-2 h-5 w-5" />
-          拍攝聯絡簿
-        </Button>
+        {isToday && (
+          <Button
+            onClick={() => router.push("/homework/capture")}
+            className="w-full h-14 text-lg"
+          >
+            <Camera className="mr-2 h-5 w-5" />
+            拍攝聯絡簿
+          </Button>
+        )}
 
-        <ReminderBanner />
+        {isToday && <ReminderBanner />}
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-sm">
@@ -126,5 +160,13 @@ export default function HomeworkDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function HomeworkDashboard() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">載入中...</div>}>
+      <HomeworkDashboardInner />
+    </Suspense>
   );
 }
