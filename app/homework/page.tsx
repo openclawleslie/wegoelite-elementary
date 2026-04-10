@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Calendar, ArrowLeft } from "lucide-react";
 import MasterList from "@/components/homework/master-list";
+import ProgressList, {
+  ProgressItem,
+} from "@/components/homework/progress-list";
 import ReminderBanner from "@/components/homework/reminder-banner";
 import PrintButton from "@/components/homework/print-button";
 import { HomeworkItem, HomeworkItemStatus } from "@/lib/types/homework";
@@ -15,6 +18,7 @@ function HomeworkDashboardInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<HomeworkItem[]>([]);
+  const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
   const [todayStudents, setTodayStudents] = useState<
     { id: string; name: string }[]
   >([]);
@@ -22,6 +26,7 @@ function HomeworkDashboardInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("school");
+  const [submitting, setSubmitting] = useState(false);
   const today = new Date().toISOString().split("T")[0];
   const selectedDate = searchParams.get("date") || today;
   const isToday = selectedDate === today;
@@ -74,6 +79,13 @@ function HomeworkDashboardInner() {
       }
       const itemsJson = await itemsRes.json();
       setItems(itemsJson.data ?? []);
+
+      // Load progress items for this date
+      const progressRes = await fetch(`/api/progress?date=${selectedDate}`);
+      if (progressRes.ok) {
+        const progressJson = await progressRes.json();
+        setProgressItems(progressJson.data ?? []);
+      }
     } catch {
       setError("網路錯誤，請重新整理");
     } finally {
@@ -114,6 +126,42 @@ function HomeworkDashboardInner() {
     },
     [],
   );
+
+  const handleProgressToggle = useCallback(
+    async (itemId: string, newStatus: "pending" | "done") => {
+      setProgressItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId ? { ...item, status: newStatus } : item,
+        ),
+      );
+      await fetch(`/api/progress?id=${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    },
+    [],
+  );
+
+  const handleSubmitDay = useCallback(async () => {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/progress/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        alert(json.message);
+        loadData();
+      } else {
+        alert(json.error ?? "提交失敗");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selectedDate, loadData]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -201,17 +249,14 @@ function HomeworkDashboardInner() {
         )}
 
         {tab === "progress" && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-              <p className="text-lg font-medium text-gray-500">進度追蹤</p>
-              <p className="text-sm text-gray-400 mt-2">
-                評量 / 自修 / 英文單字 / 珠心算
-              </p>
-              <p className="text-xs text-gray-400 mt-4">
-                系統自動分配，即將上線
-              </p>
-            </div>
-          </div>
+          <ProgressList
+            items={progressItems}
+            todayStudents={todayStudents}
+            date={selectedDate}
+            onStatusToggle={handleProgressToggle}
+            onSubmitDay={handleSubmitDay}
+            isSubmitting={submitting}
+          />
         )}
       </div>
     </div>
