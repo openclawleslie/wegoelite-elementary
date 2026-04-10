@@ -10,21 +10,21 @@ interface PrintButtonProps {
   date: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  homework: "作業",
-  test: "考試",
-  review: "複習",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "☐",
-  in_progress: "△",
-  done: "✓",
-};
+function formatItem(item: HomeworkItem, today: string): string {
+  const prefix =
+    item.item_type === "test" ? "考" : item.item_type === "review" ? "複" : "";
+  const tag = prefix ? `<b>${prefix}</b> ` : "";
+  const due =
+    item.due_date && item.due_date !== today
+      ? ` <span style="color:#999;font-size:8px">${new Date(item.due_date).getMonth() + 1}/${new Date(item.due_date).getDate()}</span>`
+      : "";
+  const check =
+    item.status === "done" ? "✓" : item.status === "in_progress" ? "△" : "☐";
+  return `<span style="display:inline-block;margin:1px 3px 1px 0;padding:1px 4px;border:1px solid #ccc;border-radius:3px;font-size:9px;white-space:nowrap;${item.status === "done" ? "background:#e8f5e9;border-color:#a5d6a7;" : ""}">${check} ${tag}${item.subject} ${item.description}${due}</span>`;
+}
 
 export default function PrintButton({ items, date }: PrintButtonProps) {
   const handlePrint = useCallback(() => {
-    // Group by student
     const grouped = new Map<string, { name: string; items: HomeworkItem[] }>();
     for (const item of items) {
       const name = item.student?.name ?? "未知";
@@ -35,40 +35,21 @@ export default function PrintButton({ items, date }: PrintButtonProps) {
     }
 
     const totalDone = items.filter((i) => i.status === "done").length;
+    const students = Array.from(grouped.entries()).sort((a, b) =>
+      a[1].name.localeCompare(b[1].name, "zh-TW"),
+    );
 
-    // Build student sections
-    let studentSections = "";
-    for (const [, { name, items: studentItems }] of grouped) {
-      const rows = studentItems
-        .map(
-          (item) => `
-        <tr>
-          <td style="text-align:center;width:36px">${STATUS_LABELS[item.status] ?? "☐"}</td>
-          <td style="width:44px">${TYPE_LABELS[item.item_type] ?? item.item_type}</td>
-          <td style="width:52px">${item.subject}</td>
-          <td>${item.description}</td>
-          <td style="width:90px;text-align:right">${item.due_date ?? "-"}</td>
-        </tr>`,
-        )
-        .join("");
-
-      studentSections += `
-        <div style="margin-bottom:16px;page-break-inside:avoid">
-          <div style="font-weight:700;font-size:14px;margin-bottom:4px">${name}</div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead>
-              <tr style="background:#1B2A4A;color:#fff">
-                <th style="padding:4px 6px;text-align:center">完成</th>
-                <th style="padding:4px 6px;text-align:left">類型</th>
-                <th style="padding:4px 6px;text-align:left">科目</th>
-                <th style="padding:4px 6px;text-align:left">內容</th>
-                <th style="padding:4px 6px;text-align:right">截止日</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    }
+    const rows = students
+      .map(([, { name, items: si }]) => {
+        const done = si.filter((i) => i.status === "done").length;
+        const chips = si.map((i) => formatItem(i, date)).join("");
+        return `<tr>
+        <td style="width:60px;font-weight:700;font-size:11px;vertical-align:top;padding:4px 6px;border-bottom:1px solid #eee;white-space:nowrap">${name}</td>
+        <td style="padding:3px 4px;border-bottom:1px solid #eee;line-height:1.6">${chips}</td>
+        <td style="width:30px;text-align:center;font-size:10px;color:#888;vertical-align:top;padding:4px 2px;border-bottom:1px solid #eee">${done}/${si.length}</td>
+      </tr>`;
+      })
+      .join("");
 
     const html = `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -76,33 +57,29 @@ export default function PrintButton({ items, date }: PrintButtonProps) {
   <meta charset="utf-8">
   <title>WeGoElite 小學作業清單 ${date}</title>
   <style>
+    @page { size: A4; margin: 12mm; }
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; padding:20px; color:#111; }
-    h1 { font-size:18px; margin-bottom:4px; }
-    .subtitle { font-size:12px; color:#666; margin-bottom:16px; }
+    body { font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif; color:#111; font-size:10px; }
+    h1 { font-size:14px; font-weight:700; }
+    .meta { font-size:9px; color:#666; margin-bottom:8px; }
     table { width:100%; border-collapse:collapse; }
-    th, td { padding:4px 6px; border-bottom:1px solid #ddd; }
-    tbody tr:nth-child(even) { background:#f9f9f9; }
-    .footer { margin-top:20px; font-size:10px; color:#999; border-top:1px solid #ddd; padding-top:8px; }
-    @media print {
-      body { padding:10px; }
-      .no-print { display:none; }
-    }
+    .footer { margin-top:8px; font-size:8px; color:#aaa; }
+    @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
   </style>
 </head>
 <body>
-  <h1>WeGoElite 小學每日作業清單</h1>
-  <div class="subtitle">${date} | 共 ${items.length} 項 | 已完成 ${totalDone} 項</div>
-  ${studentSections}
-  <div class="footer">列印時間 ${new Date().toLocaleString("zh-TW")}</div>
-  <script>window.onload = function() { window.print(); }</script>
+  <h1>WeGoElite 小學作業清單 ${date}</h1>
+  <div class="meta">共 ${items.length} 項 | 已完成 ${totalDone} 項 | 學生 ${students.length} 人</div>
+  <table>${rows}</table>
+  <div class="footer">列印 ${new Date().toLocaleString("zh-TW")}</div>
+  <script>window.onload=function(){window.print()}</script>
 </body>
 </html>`;
 
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
     }
   }, [items, date]);
 
